@@ -1,0 +1,15 @@
+version: "3"
+services:
+  frontend:
+    build: ./client
+    ports:
+      - "3000:3000"
+    working_dir: /app
+    restart: always
+
+  backend:
+    build: ./server
+    ports:
+      - "5000:5000"
+    working_dir: /app
+    restart: always
