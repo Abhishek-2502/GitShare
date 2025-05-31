@@ -16,3 +16,9 @@ EXPOSE 5000
 
 # Start the backend server
 CMD ["node", "server.js"]
+
+
+# Build the Docker image
+# docker build -t my-backend-image .
+# Run the Docker container
+# docker run -d -p 5000:5000 my-backend-image
