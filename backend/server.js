@@ -210,7 +210,7 @@ app.get('/logout', (req, res) => {
 });
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString()
