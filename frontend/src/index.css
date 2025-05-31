@@ -44,6 +44,7 @@ body {
   font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
   background-color: var(--background);
   color: var(--text-primary);
+  overflow-x: hidden;
 }
 
 #root {
@@ -58,19 +59,29 @@ a, button {
 }
 
 /* Custom Scrollbar Styles */
+
+/* Applies to both vertical and horizontal scrollbars */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 8px;   /* For vertical scrollbar */
+  height: 8px;  /* For horizontal scrollbar */
 }
+
+/* Track (background of the scrollbar) */
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: #202021;
 }
+
+/* Scrollbar thumb (draggable handle) */
 ::-webkit-scrollbar-thumb {
   background: #888;
   border-radius: 4px;
 }
+
+/* Scrollbar thumb on hover */
 ::-webkit-scrollbar-thumb:hover {
   background: #555;
 }
+
 
 /* Optional Logo Spin Animation */
 @keyframes logo-spin {
@@ -97,3 +108,14 @@ html, body {
 * {
   box-sizing: border-box;
 }
+
+canvas {
+  position: absolute !important;
+  top: 0;
+  left: 0;
+  z-index: -1;
+  height: 100% !important;
+  width: 100% !important;
+  pointer-events: none;
+}
+

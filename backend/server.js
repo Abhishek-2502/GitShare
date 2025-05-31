@@ -125,7 +125,7 @@ app.post('/api/share', async (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const { repo, expiresInHours = 24 } = req.body;
+  const { repo, branch = 'main', expiresInHours = 24 } = req.body;
   if (!repo || !repo.includes('/')) {
     return res.status(400).json({ error: 'Invalid repository format' });
   }
@@ -135,6 +135,7 @@ app.post('/api/share', async (req, res) => {
 
   shares.set(shareToken, {
     repo,
+    branch,
     expiresAt,
     owner: req.user.profile.id,
     ownerToken: req.user.accessToken,
@@ -167,7 +168,7 @@ app.get('/api/repo-content/:token', async (req, res) => {
       owner,
       repo,
       path: req.query.path || '',
-      ref: req.query.ref || 'main'
+      ref: req.query.ref || share.branch
     });
 
     res.json(data);

@@ -8,6 +8,7 @@ import {
 import axios from "axios";
 import { motion } from "framer-motion";
 import RepoShare from "./RepoShare";
+import RepoManage from "./RepoManage";
 import RepoViewer from "./RepoViewer";
 import Footer from "./components/footer";
 import Header from "./components/header";
@@ -101,16 +102,21 @@ function App() {
   }
 
   return (
-    <div ref={vantaRef} className="min-h-screen flex flex-col overflow-x-hidden">
+    <div ref={vantaRef} className="min-h-screen flex flex-col overflow-x-hidden relative">
       {/* Header component */}
       <Header user={user} handleLogin={handleLogin} handleLogout={handleLogout} />
 
-      <main className="flex-grow px-6 py-8 max-w-7xl mx-auto w-full">
+      {/* Main content area */}
+      <main className="flex-grow px-6 py-8 max-w-7xl mx-auto w-full relative z-10">
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<Home user={user} />} />
           <Route
             path="/share"
             element={user ? <RepoShare /> : <Navigate to="/" />}
+          />
+          <Route
+            path="/manage"
+            element={user ? <RepoManage /> : <Navigate to="/" />}
           />
           <Route path="/share/:token" element={<RepoViewer />} />
         </Routes>
@@ -122,8 +128,16 @@ function App() {
   );
 }
 
-function Home() {
+function Home({ user }) {
   const navigate = useNavigate();
+
+  const handleGetStarted = () => {
+    if (user) {
+      navigate("/share");
+    } else {
+      window.location.href = `${process.env.REACT_APP_BACKEND_URL}/auth/github`;
+    }
+  };
 
   return (
     <motion.div
@@ -139,13 +153,25 @@ function Home() {
         Share your private GitHub repositories securely with expiration dates and easy access.
       </p>
 
-      <motion.button
-        whileHover={{ scale: 1.05 }}
-        onClick={() => navigate("/share")}
-        className="bg-gray-900 px-6 py-3 rounded-xl font-semibold text-white hover:bg-green-500 transition text-lg mb-16"
-      >
-        Get Started
-      </motion.button>
+      <div className="flex gap-4 mb-16">
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          onClick={handleGetStarted}
+          className="bg-gray-800 px-6 py-3 rounded-xl font-semibold text-white hover:bg-green-500 transition text-lg"
+        >
+          {user ? "Share Repo" : "Get Started"}
+        </motion.button>
+        
+        {user && (
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            onClick={() => navigate("/manage")}
+            className="bg-gray-800 px-6 py-3 rounded-xl font-semibold text-white hover:bg-green-500 transition text-lg"
+          >
+            Manage Repo Links
+          </motion.button>
+        )}
+      </div>
 
       {/* Comparison Section */}
       <section className="w-full max-w-6xl text-left py-20 mt-20 px-4 mx-auto">
@@ -190,6 +216,5 @@ function Home() {
     </motion.div>
   );
 }
-
 
 export default App;
