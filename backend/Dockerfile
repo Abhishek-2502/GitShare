@@ -1,6 +1,9 @@
 # Use Node.js image
 FROM node:18
 
+# Set memory limit for Node.js during the build
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+
 # Set working directory
 WORKDIR /app
 
@@ -16,3 +19,9 @@ EXPOSE 5000
 
 # Start the backend server
 CMD ["node", "server.js"]
+
+
+# Build the Docker image
+# docker build -t my-backend-image .
+# Run the Docker container
+# docker run -d -p 5000:5000 my-backend-image
