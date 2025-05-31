@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -10,7 +10,6 @@ import {
   Divider,
   CircularProgress,
   Alert,
-  Button,
   Breadcrumbs,
   Link as MuiLink,
   TextField,
@@ -22,7 +21,8 @@ import {
   AppBar,
   Toolbar,
   Container,
-  CssBaseline
+  CssBaseline,
+  Button
 } from '@mui/material';
 import {
   Folder as FolderIcon,
@@ -33,7 +33,9 @@ import {
   Search as SearchIcon,
   Code as CodeIcon,
   Description as DescriptionIcon,
-  GitHub as GitHubIcon
+  Image as ImageIcon,
+  PictureAsPdf as PdfIcon,
+  Article as DocIcon
 } from '@mui/icons-material';
 import axios from 'axios';
 import { useParams } from 'react-router-dom';
@@ -42,26 +44,27 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { dracula } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { Document, Page, pdfjs } from 'react-pdf';
+import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
+import 'react-pdf/dist/esm/Page/TextLayer.css';
+
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 function RepoViewer() {
   const { token } = useParams();
   const [content, setContent] = useState([]);
   const [currentPath, setCurrentPath] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [fileLoading, setFileLoading] = useState(false);
   const [error, setError] = useState(null);
   const [fileContent, setFileContent] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [numPages, setNumPages] = useState(null);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const [drawerOpen, setDrawerOpen] = useState(!isMobile);
+  const [drawerOpen, setDrawerOpen] = useState(true);
 
-  useEffect(() => {
-    fetchContent();
-  }, [currentPath, token]);
-
-  const fetchContent = async () => {
+  const fetchContent = useCallback(async () => {
     try {
-      setLoading(true);
       setError(null);
       const response = await axios.get(
         `${process.env.REACT_APP_BACKEND_URL}/api/repo-content/${token}?path=${currentPath}`
@@ -71,36 +74,39 @@ function RepoViewer() {
         setContent(response.data);
       } else {
         setFileContent(response.data);
-        return;
       }
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to load content');
       setContent([]);
       setFileContent(null);
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [token, currentPath]);
+
+  useEffect(() => {
+    fetchContent();
+  }, [fetchContent]);
 
   const navigateToPath = async (item) => {
     if (item.type === 'dir') {
       setCurrentPath(item.path);
       setFileContent(null);
-      if (isMobile) setDrawerOpen(false);
     } else {
       try {
-        setLoading(true);
+        setFileLoading(true);
         const response = await axios.get(
           `${process.env.REACT_APP_BACKEND_URL}/api/repo-content/${token}?path=${item.path}`
         );
         setFileContent(response.data);
-        if (isMobile) setDrawerOpen(false);
       } catch (err) {
         setError(err.response?.data?.error || 'Failed to load file content');
       } finally {
-        setLoading(false);
+        setFileLoading(false);
       }
     }
+  };
+
+  const onDocumentLoadSuccess = ({ numPages }) => {
+    setNumPages(numPages);
   };
 
   const goUp = () => {
@@ -112,60 +118,115 @@ function RepoViewer() {
     item.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const renderFileIcon = (fileName) => {
+    const extension = fileName.split('.').pop().toLowerCase();
+    const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp'];
+    const docExtensions = ['doc', 'docx', 'odt'];
+    const pdfExtensions = ['pdf'];
+
+    if (imageExtensions.includes(extension)) return <ImageIcon color="primary" />;
+    if (pdfExtensions.includes(extension)) return <PdfIcon color="error" />;
+    if (docExtensions.includes(extension)) return <DocIcon color="info" />;
+    if (fileName.endsWith('.md')) return <DescriptionIcon color="success" />;
+    return <CodeIcon color="secondary" />;
+  };
+
   const renderFileContent = () => {
     if (!fileContent) return null;
 
     try {
       const decodedContent = atob(fileContent.content);
-      const fileExtension = fileContent.name.split('.').pop();
-      const languageMap = {
-        js: 'javascript',
-        ts: 'typescript',
-        py: 'python',
-        rb: 'ruby',
-        java: 'java',
-        go: 'go',
-        sh: 'bash',
-        yml: 'yaml',
-        yaml: 'yaml',
-        json: 'json',
-        md: 'markdown',
-        html: 'html',
-        css: 'css',
-        scss: 'scss'
-      };
+      const fileExtension = fileContent.name.split('.').pop().toLowerCase();
+      const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp'];
+      const docExtensions = ['doc', 'docx', 'odt'];
+      const pdfExtensions = ['pdf'];
+
+      if (imageExtensions.includes(fileExtension)) {
+        const imageUrl = `data:image/${fileExtension};base64,${fileContent.content}`;
+        return (
+          <Box sx={{ 
+            height: '100%',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            p: 2
+          }}>
+            <img 
+              src={imageUrl} 
+              alt={fileContent.name} 
+              style={{ 
+                maxWidth: '100%',
+                maxHeight: '100%',
+                objectFit: 'contain'
+              }} 
+            />
+          </Box>
+        );
+      }
+
+      if (pdfExtensions.includes(fileExtension)) {
+        const pdfUrl = `data:application/pdf;base64,${fileContent.content}`;
+        return (
+          <Box sx={{ height: '100%', overflow: 'auto', p: 1 }}>
+            <Document
+              file={pdfUrl}
+              onLoadSuccess={onDocumentLoadSuccess}
+              loading={
+                <Box display="flex" justifyContent="center" alignItems="center" height="100%">
+                  <CircularProgress color="success" />
+                </Box>
+              }
+            >
+              {Array.from(new Array(numPages), (el, index) => (
+                <Box key={`page_${index + 1}`} sx={{ mb: 2 }}>
+                  <Page 
+                    pageNumber={index + 1} 
+                    width={isMobile ? 300 : 600}
+                    renderTextLayer={false}
+                  />
+                </Box>
+              ))}
+            </Document>
+          </Box>
+        );
+      }
+
+      if (docExtensions.includes(fileExtension)) {
+        return (
+          <Box sx={{ 
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            p: 2
+          }}>
+            <PdfIcon sx={{ fontSize: 60, mb: 2, color: theme.palette.info.main }} />
+            <Typography variant="h6" gutterBottom>
+              DOCX/DOC Viewer
+            </Typography>
+            <Typography variant="body1" sx={{ mb: 3 }}>
+              For full document viewing capabilities, please download the file.
+            </Typography>
+            <Button 
+              variant="contained" 
+              color="info"
+              href={`data:application/octet-stream;base64,${fileContent.content}`}
+              download={fileContent.name}
+            >
+              Download Document
+            </Button>
+          </Box>
+        );
+      }
 
       if (fileContent.name.endsWith('.md')) {
         return (
           <Box sx={{ 
-            maxWidth: '100%', 
+            height: '100%',
             overflow: 'auto',
-            color: theme.palette.common.white,
-            '& h1, & h2, & h3, & h4, & h5, & h6': {
-              marginTop: theme.spacing(2),
-              marginBottom: theme.spacing(1),
-              color: theme.palette.common.white
-            },
-            '& p': {
-              marginBottom: theme.spacing(1),
-              color: theme.palette.common.white
-            },
-            '& ul, & ol': {
-              paddingLeft: theme.spacing(4),
-              marginBottom: theme.spacing(2),
-              color: theme.palette.common.white
-            },
-            '& a': {
-              color: theme.palette.primary.light
-            },
-            '& pre': {
-              backgroundColor: theme.palette.grey[900],
-              borderRadius: theme.shape.borderRadius,
-              padding: theme.spacing(2)
-            },
-            '& code': {
-              backgroundColor: theme.palette.grey[900]
-            }
+            p: 2,
+            color: theme.palette.common.white
           }}>
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
@@ -193,42 +254,49 @@ function RepoViewer() {
             </ReactMarkdown>
           </Box>
         );
-      } else {
-        return (
-          <Box sx={{ maxWidth: '100%', overflow: 'auto' }}>
-            <SyntaxHighlighter
-              style={dracula}
-              language={languageMap[fileExtension] || fileExtension}
-              showLineNumbers
-              wrapLines
-              customStyle={{ 
-                margin: 0, 
-                borderRadius: theme.shape.borderRadius,
-                backgroundColor: theme.palette.grey[900],
-                fontSize: theme.typography.body1.fontSize
-              }}
-            >
-              {decodedContent}
-            </SyntaxHighlighter>
-          </Box>
-        );
       }
+
+      const languageMap = {
+        js: 'javascript',
+        ts: 'typescript',
+        py: 'python',
+        rb: 'ruby',
+        java: 'java',
+        go: 'go',
+        sh: 'bash',
+        yml: 'yaml',
+        yaml: 'yaml',
+        json: 'json',
+        html: 'html',
+        css: 'css',
+        scss: 'scss'
+      };
+
+      return (
+        <Box sx={{ height: '100%', overflow: 'auto', p: 1 }}>
+          <SyntaxHighlighter
+            style={dracula}
+            language={languageMap[fileExtension] || fileExtension}
+            showLineNumbers
+            wrapLines
+            customStyle={{ 
+              margin: 0, 
+              backgroundColor: theme.palette.grey[900],
+              fontSize: theme.typography.body1.fontSize
+            }}
+          >
+            {decodedContent}
+          </SyntaxHighlighter>
+        </Box>
+      );
     } catch (err) {
       return (
-        <Alert severity="error">
+        <Alert severity="error" sx={{ m: 2 }}>
           Failed to decode file content
         </Alert>
       );
     }
   };
-
-  if (loading && !fileContent) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
-        <CircularProgress size={60} />
-      </Box>
-    );
-  }
 
   if (error) {
     return (
@@ -245,269 +313,271 @@ function RepoViewer() {
       sx={{
         display: 'flex',
         flexDirection: 'column',
-        minHeight: '100vh',
-        backgroundColor: theme.palette.background.default
+        height: '100vh',
+        backgroundColor: theme.palette.background.default,
+        overflow: 'hidden'
       }}
     >
       <CssBaseline />
       
-      {/* Header */}
-      <AppBar position="static" elevation={0}>
-        <Toolbar sx={{ justifyContent: 'space-between' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Typography variant="h6" component="div">
-              GitHub Repository Viewer
-            </Typography>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Typography variant="subtitle2" sx={{ mr: 2 }}>
-              Read-only Access
-            </Typography>
-          </Box>
+      <AppBar position="static" elevation={0} sx={{ 
+        backgroundColor: theme.palette.common.black,
+        minHeight: '56px'
+      }}>
+        <Toolbar sx={{ 
+          justifyContent: 'space-between',
+          minHeight: '56px !important'
+        }}>
+          <Typography variant="h6" component="div" noWrap>
+            GitHub Repository Viewer
+          </Typography>
+          <Typography variant="subtitle2" noWrap>
+            Read-only Access
+          </Typography>
         </Toolbar>
       </AppBar>
 
-      {/* Main Content */}
-      <Box component="main" sx={{ flex: 1, py: 2 }}>
-        <Container maxWidth={false} sx={{ height: '100%' }}>
-          {/* Breadcrumbs and Search */}
-          <Box
-            sx={{
-              display: 'flex',
-              flexDirection: isMobile ? 'column' : 'row',
-              justifyContent: 'space-between',
-              alignItems: isMobile ? 'flex-start' : 'center',
-              gap: 1,
-              mb: 2
-            }}
-          >
-            <Breadcrumbs aria-label="breadcrumb">
+      <Box component="main" sx={{ 
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        pt: 1
+      }}>
+        <Container maxWidth={false} sx={{ 
+          px: 2,
+          py: 1,
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: 1,
+          alignItems: isMobile ? 'flex-start' : 'center'
+        }}>
+          <Breadcrumbs aria-label="breadcrumb" sx={{ 
+            flex: 1,
+            overflowX: 'auto',
+            whiteSpace: 'nowrap',
+            py: 0.5
+          }}>
+            <MuiLink
+              underline="hover"
+              color="inherit"
+              onClick={() => {
+                setCurrentPath('');
+                setFileContent(null);
+              }}
+              sx={{ 
+                cursor: 'pointer', 
+                display: 'flex', 
+                alignItems: 'center',
+                '&:hover': { color: theme.palette.success.main }
+              }}
+            >
+              <HomeIcon sx={{ mr: 0.5 }} fontSize="inherit" />
+              Root
+            </MuiLink>
+            {currentPath.split('/').filter(Boolean).map((segment, index, arr) => (
               <MuiLink
+                key={index}
                 underline="hover"
                 color="inherit"
                 onClick={() => {
-                  setCurrentPath('');
+                  setCurrentPath(arr.slice(0, index + 1).join('/'));
                   setFileContent(null);
                 }}
                 sx={{ 
-                  cursor: 'pointer', 
-                  display: 'flex', 
-                  alignItems: 'center',
-                  '&:hover': { color: theme.palette.primary.main }
+                  cursor: 'pointer',
+                  '&:hover': { color: theme.palette.success.main }
                 }}
               >
-                <HomeIcon sx={{ mr: 0.5 }} fontSize="inherit" />
-                Root
+                {segment}
               </MuiLink>
-              {currentPath.split('/').filter(Boolean).map((segment, index, arr) => (
-                <MuiLink
-                  key={index}
-                  underline="hover"
-                  color="inherit"
-                  onClick={() => {
-                    setCurrentPath(arr.slice(0, index + 1).join('/'));
-                    setFileContent(null);
-                  }}
-                  sx={{ 
-                    cursor: 'pointer',
-                    '&:hover': { color: theme.palette.primary.main }
+            ))}
+          </Breadcrumbs>
+
+          <Box sx={{ 
+            display: 'flex',
+            gap: 1,
+            width: isMobile ? '100%' : 'auto',
+            mt: isMobile ? 1 : 0
+          }}>
+            <TextField
+              size="small"
+              placeholder="Search files..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              InputProps={{
+                startAdornment: <SearchIcon fontSize="small" sx={{ mr: 1, color: 'action.active' }} />,
+              }}
+              sx={{ 
+                flexGrow: isMobile ? 1 : undefined,
+                minWidth: isMobile ? undefined : 250
+              }}
+            />
+            <Tooltip title="Refresh">
+              <IconButton onClick={fetchContent} color="success">
+                <RefreshIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        </Container>
+
+        <Container maxWidth={false} sx={{ 
+          flex: 1,
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: 2,
+          overflow: 'hidden',
+          px: 2,
+          pb: 2
+        }}>
+          <Paper 
+            elevation={1}
+            sx={{ 
+              flex: isMobile ? '0 0 auto' : '0 0 280px',
+              width: '100%',
+              height: isMobile ? '200px' : '100%',
+              overflow: 'auto',
+              display: drawerOpen ? 'block' : 'none',
+              borderRadius: 2
+            }}
+          >
+            <List sx={{ p: 0 }}>
+              {currentPath && (
+                <ListItem
+                  button
+                  onClick={goUp}
+                  component={motion.div}
+                  whileHover={{ x: 5 }}
+                  sx={{
+                    '&:hover': {
+                      backgroundColor: theme.palette.action.hover
+                    }
                   }}
                 >
-                  {segment}
-                </MuiLink>
-              ))}
-            </Breadcrumbs>
-
-            <Box sx={{ 
-              display: 'flex', 
-              gap: 1,
-              width: isMobile ? '100%' : 'auto',
-              mt: isMobile ? 1 : 0
-            }}>
-              <TextField
-                size="small"
-                placeholder="Search files..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                InputProps={{
-                  startAdornment: <SearchIcon fontSize="small" sx={{ mr: 1, color: 'action.active' }} />,
-                }}
-                sx={{ 
-                  flexGrow: isMobile ? 1 : undefined,
-                  minWidth: isMobile ? undefined : 250
-                }}
-              />
-              <Tooltip title="Refresh">
-                <IconButton onClick={fetchContent} color="primary">
-                  <RefreshIcon />
-                </IconButton>
-              </Tooltip>
-            </Box>
-          </Box>
-
-          {/* Two-column layout */}
-          <Box sx={{ 
-            display: 'flex', 
-            flexDirection: isMobile ? 'column' : 'row',
-            gap: 2,
-            height: 'calc(100vh - 180px)',
-            overflow: 'hidden'
-          }}>
-            {/* Left: File/Directory List */}
-            {(drawerOpen || !isMobile) && (
-              <Paper 
-                elevation={1}
-                sx={{ 
-                  flex: isMobile ? '0 0 auto' : '0 0 300px',
-                  width: isMobile ? '100%' : 'auto',
-                  height: '100%',
-                  overflow: 'auto',
-                  display: drawerOpen ? 'block' : 'none'
-                }}
-              >
-                <List sx={{ p: 0 }}>
-                  {currentPath && (
-                    <ListItem
-                      button
-                      onClick={goUp}
-                      component={motion.div}
-                      whileHover={{ x: 5 }}
-                      sx={{
-                        '&:hover': {
-                          backgroundColor: theme.palette.action.hover
-                        }
-                      }}
-                    >
-                      <ListItemIcon sx={{ minWidth: 36 }}>
-                        <UpIcon color="action" />
-                      </ListItemIcon>
-                      <ListItemText primary="Go up" />
-                    </ListItem>
-                  )}
-                  {filteredContent.map((item) => (
-                    <React.Fragment key={item.path}>
-                      <ListItem
-                        button
-                        onClick={() => navigateToPath(item)}
-                        component={motion.div}
-                        whileHover={{ x: 5 }}
-                        sx={{
-                          '&:hover': {
-                            backgroundColor: theme.palette.action.hover
-                          }
-                        }}
-                      >
-                        <ListItemIcon sx={{ minWidth: 36 }}>
-                          {item.type === 'dir' ? (
-                            <FolderIcon color="primary" />
-                          ) : (
-                            <FileIcon color="secondary" />
-                          )}
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={item.name}
-                          primaryTypographyProps={{ noWrap: true }}
-                          secondary={item.type === 'dir' ? null : `${(item.size / 1024).toFixed(2)} KB`}
-                        />
-                        {item.type !== 'dir' && (
-                          <Chip
-                            label={item.name.split('.').pop()}
-                            size="small"
-                            sx={{ ml: 1 }}
-                          />
-                        )}
-                      </ListItem>
-                      <Divider variant="inset" component="li" />
-                    </React.Fragment>
-                  ))}
-                  {filteredContent.length === 0 && (
-                    <ListItem>
-                      <ListItemText 
-                        primary="No files found" 
-                        secondary={searchTerm ? "Try a different search term" : "Empty directory"}
-                      />
-                    </ListItem>
-                  )}
-                </List>
-              </Paper>
-            )}
-
-            {/* Right: File Content Viewer */}
-            <Paper
-              elevation={1}
-              sx={{
-                flex: 1,
-                height: '100%',
-                overflow: 'auto',
-                backgroundColor: theme.palette.grey[900],
-                color: theme.palette.common.white,
-                position: 'relative'
-              }}
-            >
-              {fileContent ? (
-                <>
-                  <Box 
-                    sx={{ 
-                      display: 'flex', 
-                      justifyContent: 'space-between', 
-                      alignItems: 'center', 
-                      mb: 2,
-                      position: 'sticky',
-                      top: 0,
-                      backgroundColor: theme.palette.grey[900],
-                      zIndex: 1,
-                      p: 2,
-                      borderBottom: `1px solid ${theme.palette.divider}`
+                  <ListItemIcon sx={{ minWidth: 36 }}>
+                    <UpIcon color="action" />
+                  </ListItemIcon>
+                  <ListItemText primary="Go up" />
+                </ListItem>
+              )}
+              {filteredContent.map((item) => (
+                <React.Fragment key={item.path}>
+                  <ListItem
+                    button
+                    onClick={() => navigateToPath(item)}
+                    component={motion.div}
+                    whileHover={{ x: 5 }}
+                    sx={{
+                      '&:hover': {
+                        backgroundColor: theme.palette.action.hover
+                      }
                     }}
                   >
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      {fileContent.name.endsWith('.md') ? (
-                        <DescriptionIcon color="primary" />
+                    <ListItemIcon sx={{ minWidth: 36 }}>
+                      {item.type === 'dir' ? (
+                        <FolderIcon color="success" />
                       ) : (
-                        <CodeIcon color="secondary" />
+                        renderFileIcon(item.name)
                       )}
-                      <Typography variant="h6" noWrap sx={{ maxWidth: isMobile ? '200px' : 'none', color: theme.palette.common.white }}>
-                        {fileContent.name}
-                      </Typography>
-                    </Box>
-                    <Chip 
-                      label={`${(fileContent.size / 1024).toFixed(2)} KB`} 
-                      size="small" 
-                      variant="outlined"
-                      sx={{ color: theme.palette.common.white }}
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={item.name}
+                      primaryTypographyProps={{ noWrap: true }}
+                      secondary={item.type === 'dir' ? null : `${(item.size / 1024).toFixed(2)} KB`}
                     />
-                  </Box>
-                  <Box sx={{ p: 2 }}>
-                    {renderFileContent()}
-                  </Box>
-                </>
-              ) : (
+                    {item.type !== 'dir' && (
+                      <Chip
+                        label={item.name.split('.').pop()}
+                        size="small"
+                        sx={{ ml: 1 }}
+                      />
+                    )}
+                  </ListItem>
+                  <Divider variant="inset" component="li" />
+                </React.Fragment>
+              ))}
+              {filteredContent.length === 0 && (
+                <ListItem>
+                  <ListItemText 
+                    primary="No files found" 
+                    secondary={searchTerm ? "Try a different search term" : "Empty directory"}
+                  />
+                </ListItem>
+              )}
+            </List>
+          </Paper>
+
+          <Paper
+            elevation={1}
+            sx={{
+              flex: 1,
+              height: isMobile ? 'calc(100vh - 380px)' : '100%',
+              minHeight: isMobile ? '300px' : 'auto',
+              overflow: 'auto',
+              backgroundColor: theme.palette.grey[900],
+              color: theme.palette.common.white,
+              position: 'relative',
+              borderRadius: 2
+            }}
+          >
+            {fileLoading ? (
+              <Box display="flex" justifyContent="center" alignItems="center" height="100%">
+                <CircularProgress size={60} color="success" />
+              </Box>
+            ) : fileContent ? (
+              <>
                 <Box 
                   sx={{ 
                     display: 'flex', 
-                    flexDirection: 'column', 
+                    justifyContent: 'space-between', 
                     alignItems: 'center', 
-                    justifyContent: 'center', 
-                    height: '100%',
-                    textAlign: 'center',
-                    p: 3,
-                    color: theme.palette.common.white
+                    mb: 2,
+                    position: 'sticky',
+                    top: 0,
+                    backgroundColor: theme.palette.grey[900],
+                    zIndex: 1,
+                    p: 2,
+                    borderBottom: `1px solid ${theme.palette.divider}`
                   }}
                 >
-                  <DescriptionIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
-                  <Typography variant="h6" gutterBottom>
-                    No file selected
-                  </Typography>
-                  <Typography variant="body2">
-                    {isMobile ? 'Tap on a file to view its content' : 'Click on a file to view its content'}
-                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {renderFileIcon(fileContent.name)}
+                    <Typography variant="h6" noWrap sx={{ maxWidth: isMobile ? '200px' : 'none' }}>
+                      {fileContent.name}
+                    </Typography>
+                  </Box>
+                  <Chip 
+                    label={`${(fileContent.size / 1024).toFixed(2)} KB`} 
+                    size="small" 
+                    variant="outlined"
+                  />
                 </Box>
-              )}
-            </Paper>
-          </Box>
+                {renderFileContent()}
+              </>
+            ) : (
+              <Box 
+                sx={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  height: '100%',
+                  textAlign: 'center',
+                  p: 3
+                }}
+              >
+                <DescriptionIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
+                <Typography variant="h6" gutterBottom>
+                  No file selected
+                </Typography>
+                <Typography variant="body2">
+                  {isMobile ? 'Tap on a file to view its content' : 'Click on a file to view its content'}
+                </Typography>
+              </Box>
+            )}
+          </Paper>
         </Container>
       </Box>
-
     </Box>
   );
 }

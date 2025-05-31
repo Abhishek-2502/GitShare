@@ -177,6 +177,28 @@ app.get('/api/repo-content/:token', async (req, res) => {
   }
 });
 
+app.get('/api/repos/:owner/:repo/branches', async (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const { owner, repo } = req.params;
+  const octokit = new Octokit({ auth: req.user.accessToken });
+
+  try {
+    const { data } = await octokit.repos.listBranches({
+      owner,
+      repo,
+      per_page: 100,
+    });
+    const branches = data.map(branch => ({ name: branch.name }));
+    res.json(branches);
+  } catch (error) {
+    console.error('GitHub API error (branches):', error);
+    res.status(500).json({ error: 'Failed to fetch branches' });
+  }
+});
+
 app.get('/logout', (req, res) => {
   req.logout(() => {
     req.session.destroy(() => {
