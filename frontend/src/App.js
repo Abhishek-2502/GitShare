@@ -16,8 +16,8 @@ import './index.css';
 import { Check, Close } from "@mui/icons-material";
 
 function App() {
-  const [vantaEffect, setVantaEffect] = useState(null);
   const vantaRef = useRef(null);
+  const [vantaEffect, setVantaEffect] = useState(null);
 
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -64,7 +64,7 @@ function App() {
       const THREE = await import('three');
       const VANTA = await import('vanta/dist/vanta.fog.min');
 
-      if (!vantaEffect) {
+      if (vantaRef.current && !vantaEffect) {
         setVantaEffect(
           VANTA.default({
             el: vantaRef.current,
