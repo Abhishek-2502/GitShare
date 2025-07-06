@@ -60,38 +60,40 @@ function App() {
   }, []);
 
   useEffect(() => {
+    let effectInstance = null;
+
     const initVanta = async () => {
       const THREE = await import('three');
       const VANTA = await import('vanta/dist/vanta.fog.min');
 
-      if (vantaRef.current && !vantaEffect) {
-        setVantaEffect(
-          VANTA.default({
-            el: vantaRef.current,
-            THREE,
-            mouseControls: true,
-            touchControls: true,
-            gyroControls: false,
-            minHeight: 200.0,
-            minWidth: 200.0,
-            highlightColor: 0x00ff99,
-            midtoneColor: 0x003300,
-            lowlightColor: 0x000000,
-            baseColor: 0x111111,
-            blurFactor: 0.6,
-            speed: 1.5,
-            zoom: 0.8,
-          })
-        );
+      if (vantaRef.current) {
+        effectInstance = VANTA.default({
+          el: vantaRef.current,
+          THREE,
+          mouseControls: true,
+          touchControls: true,
+          gyroControls: false,
+          minHeight: 200.0,
+          minWidth: 200.0,
+          highlightColor: 0x00ff99,
+          midtoneColor: 0x003300,
+          lowlightColor: 0x000000,
+          baseColor: 0x111111,
+          blurFactor: 0.6,
+          speed: 1.5,
+          zoom: 0.8,
+        });
+        setVantaEffect(effectInstance);
       }
     };
 
     initVanta();
 
     return () => {
-      if (vantaEffect) vantaEffect.destroy();
+      if (effectInstance) effectInstance.destroy();
     };
-  }, [vantaEffect]);
+  }, []);
+
 
   if (loading) {
     return (
