@@ -44,7 +44,7 @@ app.use(session({
     }
   }),
   cookie: {
-    sameSite: 'none',           // GitHub login → cross-site
+    sameSite: 'lax',           // GitHub login → cross-site
     secure: false,              // ⚠️ Use `false` for HTTP (no HTTPS)
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000
