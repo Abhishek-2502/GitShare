@@ -44,11 +44,10 @@ app.use(session({
     }
   }),
   cookie: {
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'none',           // GitHub login → cross-site
+    secure: false,              // ⚠️ Use `false` for HTTP (no HTTPS)
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000,
-    domain: process.env.NODE_ENV === 'production' ? '.gitshare-backend.onrender.com' : undefined
+    maxAge: 24 * 60 * 60 * 1000
   }
 }));
 
