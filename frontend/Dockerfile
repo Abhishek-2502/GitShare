@@ -102,7 +102,7 @@ FROM nginx:alpine
 RUN rm -rf /usr/share/nginx/html/*
 
 # Copy custom nginx config (optional but recommended)
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY ./nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy built React app from previous stage
 COPY --from=build /app/build /usr/share/nginx/html
