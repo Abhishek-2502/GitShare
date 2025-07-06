@@ -83,6 +83,7 @@ function App() {
           speed: 1.5,
           zoom: 0.8,
         });
+
         setVantaEffect(effectInstance);
       }
     };
@@ -92,8 +93,7 @@ function App() {
     return () => {
       if (effectInstance) effectInstance.destroy();
     };
-  }, []);
-
+  }, [user]); // re-run on user change (i.e. after login)
 
   if (loading) {
     return (
