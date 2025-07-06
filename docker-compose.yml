@@ -5,10 +5,10 @@ services:
       context: ./frontend
       args:
         - REACT_APP_BACKEND_URL=http://34.53.75.59:5000
-        - REACT_APP_FRONTEND_URL=http://34.53.75.59:3000
+        - REACT_APP_FRONTEND_URL=http://34.53.75.59:80
     container_name: react-frontend
     ports:
-      - "3000:80"
+      - "80:80"
     working_dir: /app
     restart: always
     networks:
