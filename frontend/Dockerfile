@@ -27,8 +27,9 @@
 # # docker run -d -p 3000:3000 my-frontend-image
 
 
-# For Production Deployment of a React App with Docker
 
+
+# For Production Deployment of a React App with Docker
 # Stage 1: Build the React app
 FROM node:18 AS build
 

@@ -1,15 +1,27 @@
 version: "3"
 services:
   frontend:
-    build: ./client
+    build:
+      context: ./frontend
+    container_name: react-frontend
     ports:
       - "3000:3000"
     working_dir: /app
     restart: always
+    networks:
+      - app-network
 
   backend:
-    build: ./server
+    build:
+      context: ./backend
+    container_name: node-backend
     ports:
       - "5000:5000"
     working_dir: /app
     restart: always
+    networks:
+      - app-network
+
+
+networks:
+  app-network:
