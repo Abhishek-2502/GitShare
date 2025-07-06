@@ -91,9 +91,12 @@ function App() {
     initVanta();
 
     return () => {
-      if (effectInstance) effectInstance.destroy();
+      if (effectInstance) {
+        effectInstance.destroy();
+        setVantaEffect(null);
+      }
     };
-  }, [user]); // re-run on user change (i.e. after login)
+  }, [user, vantaRef]); // re-run on user change (i.e. after login)
 
   if (loading) {
     return (
