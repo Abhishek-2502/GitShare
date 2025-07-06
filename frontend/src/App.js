@@ -12,12 +12,17 @@ import RepoManage from "./RepoManage";
 import RepoViewer from "./RepoViewer";
 import Footer from "./components/footer";
 import Header from "./components/header";
+import { useLocation } from "react-router-dom";
 import './index.css';
 import { Check, Close } from "@mui/icons-material";
 
 function App() {
   const vantaRef = useRef(null);
   const [vantaEffect, setVantaEffect] = useState(null);
+  const vantaEffectRef = useRef(null);
+  const location = useLocation();
+
+
 
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -35,39 +40,12 @@ function App() {
     process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
 
   useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const res = await axios.get("/api/user");
-        if (res.data.authenticated) {
-          setUser({
-            login: res.data.username,
-            avatar_url: res.data.avatar,
-          });
-        } else {
-          setUser(null);
-        }
-      } catch (err) {
-        if (err.response?.status === 401) {
-          setUser(null);
-        } else {
-          console.error("Error fetching user:", err);
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchUser();
-  }, []);
-
-  useEffect(() => {
-    let effectInstance = null;
-
     const initVanta = async () => {
-      const THREE = await import('three');
-      const VANTA = await import('vanta/dist/vanta.fog.min');
+      const THREE = await import("three");
+      const VANTA = await import("vanta/dist/vanta.fog.min");
 
-      if (vantaRef.current) {
-        effectInstance = VANTA.default({
+      if (vantaRef.current && !vantaEffectRef.current && location.pathname === "/") {
+        vantaEffectRef.current = VANTA.default({
           el: vantaRef.current,
           THREE,
           mouseControls: true,
@@ -83,20 +61,53 @@ function App() {
           speed: 1.5,
           zoom: 0.8,
         });
-
-        setVantaEffect(effectInstance);
       }
     };
 
     initVanta();
 
     return () => {
-      if (effectInstance) {
-        effectInstance.destroy();
-        setVantaEffect(null);
+      if (vantaEffectRef.current) {
+        vantaEffectRef.current.destroy();
+        vantaEffectRef.current = null;
       }
     };
-  }, [user, vantaRef]); // re-run on user change (i.e. after login)
+  }, [location.pathname]); // 👈 re-run on route change
+
+  useEffect(() => {
+    const initVanta = async () => {
+      const THREE = await import("three");
+      const VANTA = await import("vanta/dist/vanta.fog.min");
+
+      if (vantaRef.current && !vantaEffectRef.current) {
+        vantaEffectRef.current = VANTA.default({
+          el: vantaRef.current,
+          THREE,
+          mouseControls: true,
+          touchControls: true,
+          gyroControls: false,
+          minHeight: 200.0,
+          minWidth: 200.0,
+          highlightColor: 0x00ff99,
+          midtoneColor: 0x003300,
+          lowlightColor: 0x000000,
+          baseColor: 0x111111,
+          blurFactor: 0.6,
+          speed: 1.5,
+          zoom: 0.8,
+        });
+      }
+    };
+
+    initVanta();
+
+    return () => {
+      if (vantaEffectRef.current) {
+        vantaEffectRef.current.destroy();
+        vantaEffectRef.current = null;
+      }
+    };
+  }, []);
 
   if (loading) {
     return (
