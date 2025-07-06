@@ -203,7 +203,7 @@ docker-compose down
 
 ---
 
-## ✨ Features
+## Features
 
 * **User Authentication**: Secure login and signup.
 * **Repository Sharing**: Share GitHub repository links with descriptions and tags.
@@ -235,10 +235,11 @@ docker-compose down
 * Docker-Compose
 * Jenkins
 * GCP
+* Render
 
 ---
 
-## 🖼️ Images
+## Images
 
 ![Home](images/home.png)
 ![Sharing](images/sharing.png)
@@ -246,7 +247,7 @@ docker-compose down
 
 ---
 
-## 🧩 Usage
+## Usage
 
 1. **Register / Login**: Create an account or log in.
 2. **Share a Repository**: Enter a GitHub URL, add a description and tags.
@@ -255,13 +256,13 @@ docker-compose down
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the **MIT License** – see the [LICENSE](./LICENSE) file for details.
 
 ---
 
-## 👨‍💻 Author
+## Author
 
 **Abhishek Rajput**
 
