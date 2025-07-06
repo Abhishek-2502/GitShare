@@ -155,7 +155,7 @@ function Home({ user }) {
         Share your private GitHub repositories securely with expiration dates and easy access.
       </p>
 
-      <div className="flex gap-4 mb-16">
+      <div className="flex gap-4 mb-20">
         <motion.button
           whileHover={{ scale: 1.05 }}
           onClick={handleGetStarted}
