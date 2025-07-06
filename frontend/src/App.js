@@ -60,38 +60,40 @@ function App() {
   }, []);
 
   useEffect(() => {
+    let effectInstance = null;
+
     const initVanta = async () => {
       const THREE = await import('three');
       const VANTA = await import('vanta/dist/vanta.fog.min');
 
-      if (vantaRef.current && !vantaEffect) {
-        setVantaEffect(
-          VANTA.default({
-            el: vantaRef.current,
-            THREE,
-            mouseControls: true,
-            touchControls: true,
-            gyroControls: false,
-            minHeight: 200.0,
-            minWidth: 200.0,
-            highlightColor: 0x00ff99,
-            midtoneColor: 0x003300,
-            lowlightColor: 0x000000,
-            baseColor: 0x111111,
-            blurFactor: 0.6,
-            speed: 1.5,
-            zoom: 0.8,
-          })
-        );
+      if (vantaRef.current) {
+        effectInstance = VANTA.default({
+          el: vantaRef.current,
+          THREE,
+          mouseControls: true,
+          touchControls: true,
+          gyroControls: false,
+          minHeight: 200.0,
+          minWidth: 200.0,
+          highlightColor: 0x00ff99,
+          midtoneColor: 0x003300,
+          lowlightColor: 0x000000,
+          baseColor: 0x111111,
+          blurFactor: 0.6,
+          speed: 1.5,
+          zoom: 0.8,
+        });
+
+        setVantaEffect(effectInstance);
       }
     };
 
     initVanta();
 
     return () => {
-      if (vantaEffect) vantaEffect.destroy();
+      if (effectInstance) effectInstance.destroy();
     };
-  }, [vantaEffect]);
+  }, [user]); // re-run on user change (i.e. after login)
 
   if (loading) {
     return (
@@ -194,7 +196,7 @@ function Home({ user }) {
               <li> <Close className="text-red-500" /> <strong>GitHub account required</strong><br /><span className="text-sm">Recipients need a GitHub account to view your repositories</span></li>
               <li> <Close className="text-red-500" /> <strong>Add as collaborator</strong><br /><span className="text-sm">Need to add recipients as contributors to grant access</span></li>
               <li> <Close className="text-red-500" /> <strong>Limited sharing options</strong><br /><span className="text-sm">Difficult to share with non-GitHub users like employers</span></li>
-              <li> <Close className="text-red-500" /> <strong>No usage analytics</strong><br /><span className="text-sm">Can't track repository views or engagement metrics</span></li>
+              <li> <Close className="text-red-500" /> <strong>Manual access control</strong><br /><span className="text-sm">Requires manually adding/removing collaborators to manage access</span></li>
               <li> <Close className="text-red-500" /> <strong>Permanent access</strong><br /><span className="text-sm">Collaborators retain access until manually removed</span></li>
             </ul>
           </div>
@@ -207,7 +209,7 @@ function Home({ user }) {
               <li><Check className="text-green-400" /> <strong>No GitHub account required</strong><br /><span className="text-sm">Anyone with the link can view your repositories</span></li>
               <li><Check className="text-green-400" />  <strong>One-click sharing</strong><br /><span className="text-sm">Generate shareable links in seconds</span></li>
               <li><Check className="text-green-400" />  <strong>Universal access</strong><br /><span className="text-sm">Share with anyone, GitHub user or not</span></li>
-              <li><Check className="text-green-400" /> <strong>Detailed analytics</strong><br /><span className="text-sm">Track views and engagement for each shared repository</span></li>
+              <li><Check className="text-green-400" /> <strong>Manage Shared Links</strong><br /><span className="text-sm">Enable, disable, or delete links anytime for full control</span></li>
               <li><Check className="text-green-400" />  <strong>Time-limited access</strong><br /><span className="text-sm">Set expiration dates for your shared links</span></li>
             </ul>
           </div>

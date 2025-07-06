@@ -8,6 +8,7 @@ const cors = require('cors');
 const crypto = require('crypto');
 
 const app = express();
+const MongoStore = require('connect-mongo');
 
 // Validate required environment variables
 const requiredEnvVars = ['GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET', 'SESSION_SECRET', 'FRONTEND_URL'];
@@ -35,12 +36,19 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   proxy: process.env.NODE_ENV === 'production',
+  store: MongoStore.create({
+    mongoUrl: process.env.MONGO_URI,
+    ttl: 24 * 60 * 60, // 1 day
+    crypto: {
+      secret: process.env.SESSION_SECRET
+    }
+  }),
   cookie: {
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000,
-    domain: process.env.NODE_ENV === 'production' ? '.yourdomain.com' : undefined
+    domain: process.env.NODE_ENV === 'production' ? '.gitshare-backend.onrender.com' : undefined
   }
 }));
 
