@@ -6,6 +6,7 @@ const GitHubStrategy = require('passport-github').Strategy;
 const { Octokit } = require('@octokit/rest');
 const cors = require('cors');
 const crypto = require('crypto');
+const Share = require('./models/share');
 
 const app = express();
 const MongoStore = require('connect-mongo');
@@ -19,7 +20,20 @@ for (const envVar of requiredEnvVars) {
   }
 }
 
-// Middleware
+// MongoDB connection
+const mongoose = require('mongoose');
+
+mongoose.connect(process.env.MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+.then(() => console.log("MongoDB connected"))
+.catch(err => {
+  console.error("MongoDB connection error:", err);
+  process.exit(1);
+});
+
+// Middleware for parsing JSON and URL-encoded data
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors({
@@ -30,7 +44,7 @@ app.use(cors({
   exposedHeaders: ['set-cookie']
 }));
 
-// Session configuration
+// Session configuration with MongoDB store
 app.use(session({
   secret: process.env.SESSION_SECRET,
   resave: false,
@@ -56,7 +70,7 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
-// GitHub OAuth Strategy
+// GitHub OAuth Strategy configuration
 passport.use(new GitHubStrategy({
   clientID: process.env.GITHUB_CLIENT_ID,
   clientSecret: process.env.GITHUB_CLIENT_SECRET,
@@ -75,21 +89,22 @@ passport.use(new GitHubStrategy({
   });
 }));
 
-// Passport serialization
+// Passport serialization and deserialization
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((user, done) => done(null, user));
 
-// In-memory store for shares
-const shares = new Map();
+
 
 // Trust proxy in production
 if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
 
-// Routes
+// ROUTES
+// GitHub OAuth routes
 app.get('/auth/github', passport.authenticate('github'));
 
+// GitHub OAuth callback
 app.get('/auth/github/callback',
   passport.authenticate('github', { failureRedirect: `${process.env.FRONTEND_URL}/login` }),
   (req, res) => {
@@ -97,6 +112,8 @@ app.get('/auth/github/callback',
   }
 );
 
+
+// Get current user info
 app.get('/api/user', (req, res) => {
   if (!req.isAuthenticated()) {
     return res.status(200).json({ authenticated: false });
@@ -109,6 +126,8 @@ app.get('/api/user', (req, res) => {
   });
 });
 
+
+// List user repositories
 app.get('/api/repos', async (req, res) => {
   if (!req.isAuthenticated()) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -128,50 +147,64 @@ app.get('/api/repos', async (req, res) => {
   }
 });
 
+// Create a shareable link stored in MongoDB
 app.post('/api/share', async (req, res) => {
   if (!req.isAuthenticated()) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const { repo, branch = 'main', expiresInHours = 24 } = req.body;
+  const { repo, branch = 'main', expiresInHours, expiresAt: clientExpiresAt } = req.body;
   if (!repo || !repo.includes('/')) {
     return res.status(400).json({ error: 'Invalid repository format' });
   }
 
   const shareToken = crypto.randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + expiresInHours * 60 * 60 * 1000);
 
-  shares.set(shareToken, {
-    repo,
-    branch,
-    expiresAt,
-    owner: req.user.profile.id,
-    ownerToken: req.user.accessToken,
-    createdAt: new Date()
-  });
-
-  res.json({
-    shareToken,
-    shareLink: `${process.env.FRONTEND_URL}/share/${shareToken}`,
-    expiresAt: expiresAt.toISOString()
-  });
-});
-
-app.get('/api/repo-content/:token', async (req, res) => {
-  const share = shares.get(req.params.token);
-  if (!share) {
-    return res.status(404).json({ error: 'Share link not found' });
-  }
-
-  if (share.expiresAt < new Date()) {
-    shares.delete(req.params.token);
-    return res.status(410).json({ error: 'Share link expired' });
+  let expiresAt;
+  if (clientExpiresAt) {
+    // Use frontend-provided expiry datetime
+    expiresAt = new Date(clientExpiresAt);
+  } else {
+    // Default to hours-based expiry
+    const hours = Number(expiresInHours) || 24;
+    expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000);
   }
 
   try {
+    const share = new Share({
+      token: shareToken,
+      repo,
+      branch,
+      owner: req.user.profile.id,
+      ownerToken: req.user.accessToken,
+      expiresAt
+    });
+
+    await share.save();
+
+    res.json({
+      shareToken,
+      shareLink: `${process.env.FRONTEND_URL}/share/${shareToken}`,
+      expiresAt: expiresAt.toISOString()
+    });
+  } catch (err) {
+    console.error("Error saving share:", err);
+    res.status(500).json({ error: 'Failed to create share' });
+  }
+});
+
+
+// Fetch repository content via share token stored in MongoDB
+app.get('/api/repo-content/:token', async (req, res) => {
+  try {
+    const share = await Share.findOne({ token: req.params.token });
+    if (!share || share.expiresAt < new Date()) {
+      return res.status(410).json({ error: 'Share link expired' });
+    }
+
     const [owner, repo] = share.repo.split('/');
     const octokit = new Octokit({ auth: share.ownerToken });
-    
+
     const { data } = await octokit.repos.getContent({
       owner,
       repo,
@@ -186,6 +219,8 @@ app.get('/api/repo-content/:token', async (req, res) => {
   }
 });
 
+
+// List branches of a repository
 app.get('/api/repos/:owner/:repo/branches', async (req, res) => {
   if (!req.isAuthenticated()) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -208,6 +243,7 @@ app.get('/api/repos/:owner/:repo/branches', async (req, res) => {
   }
 });
 
+// Logout route
 app.get('/logout', (req, res) => {
   req.logout(() => {
     req.session.destroy(() => {

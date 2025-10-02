@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef} from "react";
+import { useParams, useLocation, useNavigate } from "react-router-dom";
 import {
   Box,
   Typography,
@@ -39,18 +40,17 @@ import {
   Download as DownloadIcon,
 } from "@mui/icons-material";
 import axios from "axios";
-import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+
+import MarkdownViewer from "./components/MarkdownViewer";
+
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { dracula } from "react-syntax-highlighter/dist/esm/styles/prism";
-import remarkMath from "remark-math";
-import rehypeKatex from "rehype-katex";
-import "katex/dist/katex.min.css";
+import "github-markdown-css/github-markdown-light.css"; // light theme
+import "github-markdown-css/github-markdown-dark.css"; // dark theme
 
 function RepoViewer() {
-  const { token } = useParams();
+  const { token, "*": repoPath } = useParams();
   const [content, setContent] = useState([]);
   const [currentPath, setCurrentPath] = useState("");
   const [fileLoading, setFileLoading] = useState(false);
@@ -62,29 +62,87 @@ function RepoViewer() {
   const [drawerOpen] = useState(true);
   const [allFiles, setAllFiles] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const readmeOpened = useRef(false); // <-- prevent infinite loop
+  
+
+  // Extract path inside repo
+  useEffect(() => {
+    if (!repoPath) {
+      setCurrentPath(""); // root folder
+    } else {
+      const segments = repoPath.split("/");
+      // If last segment is a file (has extension), remove it
+      if (segments[segments.length - 1].includes(".")) {
+        segments.pop();
+      }
+      setCurrentPath(segments.join("/"));
+    }
+  }, [repoPath]);
+
 
   // Fetch content for the current path (non-recursive)
   const fetchContent = useCallback(
-    async (path = currentPath) => {
-      try {
-        setError(null);
-        const response = await axios.get(
-          `${process.env.REACT_APP_BACKEND_URL}/api/repo-content/${token}?path=${path}`
-        );
+      async (path = repoPath || "") => {
+        try {
+          setError(null);
+          setFileLoading(true);
 
-        if (Array.isArray(response.data)) {
-          setContent(response.data);
-        } else {
-          setFileContent(response.data);
+          const response = await axios.get(
+            `${process.env.REACT_APP_BACKEND_URL}/api/repo-content/${token}?path=${path}`
+          );
+
+          if (Array.isArray(response.data)) {
+            // It's a folder
+            setContent(response.data);
+            setFileContent(null);
+
+            // Auto-open README.md if exists and not opened before
+            if (!readmeOpened.current) {
+              const readme = response.data.find(
+                (item) =>
+                  item.type === "file" && item.name.toLowerCase() === "readme.md"
+              );
+              if (readme) {
+                readmeOpened.current = true; // mark as opened
+                navigate(`/share/${token}/${readme.path}`, { replace: true });
+              }
+            }
+          } else {
+            // It's a file
+            setFileContent(response.data);
+
+            // Determine parent folder
+            const segments = path.split("/");
+            segments.pop(); // remove file name
+            const parentPath = segments.join("/");
+
+            // Fetch parent folder content for side navigator
+            const folderResponse = await axios.get(
+              `${process.env.REACT_APP_BACKEND_URL}/api/repo-content/${token}?path=${parentPath}`
+            );
+
+            setContent(Array.isArray(folderResponse.data) ? folderResponse.data : []);
+            setCurrentPath(parentPath);
+          }
+        } catch (err) {
+          setError(err.response?.data?.error || "Failed to load content");
+          setContent([]);
+          setFileContent(null);
+        } finally {
+          setFileLoading(false);
         }
-      } catch (err) {
-        setError(err.response?.data?.error || "Failed to load content");
-        setContent([]);
-        setFileContent(null);
-      }
-    },
-    [token, currentPath]
-  );
+      },
+      [token, repoPath, navigate]
+    );
+
+  // Reset readmeOpened when path changes
+  useEffect(() => {
+    readmeOpened.current = false;
+    fetchContent();
+  }, [location.pathname, fetchContent]);
+
 
   // Recursive function to fetch all files in directory tree
   const fetchAllFilesRecursively = useCallback(
@@ -121,9 +179,6 @@ function RepoViewer() {
     [token]
   );
 
-  useEffect(() => {
-    fetchContent();
-  }, [fetchContent]);
 
   useEffect(() => {
     if (searchTerm.trim()) {
@@ -142,30 +197,20 @@ function RepoViewer() {
     }
   }, [searchTerm, currentPath, fetchAllFilesRecursively]);
 
-  const navigateToPath = async (item) => {
-    if (item.type === "dir") {
-      setCurrentPath(item.path);
-      setFileContent(null);
-    } else {
-      try {
-        setFileLoading(true);
-        const response = await axios.get(
-          `${process.env.REACT_APP_BACKEND_URL}/api/repo-content/${token}?path=${item.path}`
-        );
-        setFileContent(response.data);
-      } catch (err) {
-        setError(err.response?.data?.error || "Failed to load file content");
-      } finally {
-        setFileLoading(false);
-      }
-    }
+  // Function to navigate to a directory or load a file
+  const navigateToPath = (item) => {
+    navigate(`/share/${token}/${item.path}`);
   };
 
+  // Function to go up one directory level
   const goUp = () => {
-    setCurrentPath(currentPath.split("/").slice(0, -1).join("/"));
+    // setCurrentPath(currentPath.split("/").slice(0, -1).join("/"));
+    const parentPath = currentPath.split("/").slice(0, -1).join("/");
+    navigate(`/share/${token}/${parentPath}`);
     setFileContent(null);
   };
 
+  // Filtered content based on search term
   const filteredContent = searchTerm
     ? allFiles.filter(
         (item) =>
@@ -176,6 +221,7 @@ function RepoViewer() {
         item.name.toLowerCase().includes(searchTerm.toLowerCase())
       );
 
+  // Render file icon based on extension
   const renderFileIcon = (fileName) => {
     const extension = fileName.split(".").pop().toLowerCase();
     const imageExtensions = ["jpg", "jpeg", "png", "gif", "bmp", "svg", "webp"];
@@ -190,6 +236,7 @@ function RepoViewer() {
     return <CodeIcon color="secondary" />;
   };
 
+  // Render file content based on type
   const renderFileContent = () => {
     if (!fileContent) return null;
 
@@ -197,6 +244,8 @@ function RepoViewer() {
       const decodedContent = atob(fileContent.content);
       const fileExtension = fileContent.name.split(".").pop().toLowerCase();
       console.log("File Extension:", fileExtension);
+
+      // Define file type categories
       const imageExtensions = [
         "jpg",
         "jpeg",
@@ -208,7 +257,27 @@ function RepoViewer() {
       ];
       const docExtensions = ["doc", "docx", "odt"];
       const pdfExtensions = ["pdf"];
-      const textExtensions = ["txt", "md", "json", "xml", "csv", "log","yaml", "yml", "ini", "conf", "properties","bash", "sh", "zsh", "fish","shell", "bat", "cmd","license"];
+      const textExtensions = [
+        "txt",
+        "md",
+        "json",
+        "xml",
+        "csv",
+        "log",
+        "yaml",
+        "yml",
+        "ini",
+        "conf",
+        "properties",
+        "bash",
+        "sh",
+        "zsh",
+        "fish",
+        "shell",
+        "bat",
+        "cmd",
+        "license",
+      ];
       const codeExtensions = [
         "js",
         "ts",
@@ -229,6 +298,31 @@ function RepoViewer() {
         "sql",
         "scss",
       ];
+
+      const languageMap = {
+        js: "javascript",
+        ts: "typescript",
+        py: "python",
+        rb: "ruby",
+        java: "java",
+        go: "go",
+        sh: "bash",
+        yml: "yaml",
+        yaml: "yaml",
+        json: "json",
+        html: "html",
+        css: "css",
+        jsx: "jsx",
+        tsx: "tsx",
+        cpp: "cpp",
+        c: "c",
+        php: "php",
+        sql: "sql",
+        xml: "xml",
+        txt: "text",
+        scss: "scss",
+        md: "markdown",
+      };
 
       // FOR IMAGE FILES
       if (imageExtensions.includes(fileExtension)) {
@@ -259,115 +353,49 @@ function RepoViewer() {
       }
 
       // FOR MARKDOWN FILES
-      if (fileContent.name.endsWith(".md")) {
+      if (fileContent.name.toLowerCase().endsWith(".md")) {
+        const decodedContent = atob(fileContent.content);
         return (
-          <Box sx={{ position: "relative", height: "100%" }}>
-            <Box
-              sx={{
-                height: "100%",
-                overflow: "auto",
-                p: 4,
-                "& h1": {
-                  fontSize: "2rem",
-                  borderBottom: `1px solid ${theme.palette.divider}`,
-                  paddingBottom: "0.3em",
-                  marginBottom: "1em",
-                },
-                "& h2": {
-                  fontSize: "1.5rem",
-                  borderBottom: `1px solid ${theme.palette.divider}`,
-                  paddingBottom: "0.3em",
-                  marginBottom: "1em",
-                },
-                "& pre": {
-                  backgroundColor: theme.palette.grey[800],
-                  borderRadius: "4px",
-                  padding: "1em",
-                  overflow: "auto",
-                },
-                "& code": {
-                  fontFamily: "monospace",
-                  backgroundColor: theme.palette.grey[800],
-                  padding: "0.2em 0.4em",
-                  borderRadius: "3px",
-                },
-                "& blockquote": {
-                  borderLeft: `4px solid ${theme.palette.grey[500]}`,
-                  paddingLeft: "1em",
-                  color: theme.palette.grey[300],
-                  marginLeft: 0,
-                },
-                "& table": {
-                  borderCollapse: "collapse",
-                  width: "100%",
-                  margin: "1em 0",
-                },
-                "& th, & td": {
-                  border: `1px solid ${theme.palette.grey[700]}`,
-                  padding: "0.5em",
-                },
-                "& th": {
-                  backgroundColor: theme.palette.grey[800],
-                },
-                "& img": {
-                  maxWidth: "100%",
-                },
-              }}
-            >
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkMath]}
-                rehypePlugins={[rehypeKatex]}
-                components={{
-                  code({ node, inline, className, children, ...props }) {
-                    const match = /language-(\w+)/.exec(className || "");
-                    return !inline && match ? (
-                      <SyntaxHighlighter
-                        style={dracula}
-                        language={match[1]}
-                        PreTag="div"
-                        {...props}
-                      >
-                        {String(children).replace(/\n$/, "")}
-                      </SyntaxHighlighter>
-                    ) : (
-                      <code className={className} {...props}>
-                        {children}
-                      </code>
-                    );
-                  },
-                }}
-              >
-                {decodedContent}
-              </ReactMarkdown>
-            </Box>
+          <Box
+            sx={{ position: "relative", height: "100%", overflow: "hidden" }}
+          >
+            <MarkdownViewer
+              markdown={decodedContent}
+              token={token}
+              currentPath={currentPath} // path of the folder where README is
+              backendUrl={process.env.REACT_APP_BACKEND_URL}
+            />
           </Box>
         );
       }
 
-      const languageMap = {
-        js: "javascript",
-        ts: "typescript",
-        py: "python",
-        rb: "ruby",
-        java: "java",
-        go: "go",
-        sh: "bash",
-        yml: "yaml",
-        yaml: "yaml",
-        json: "json",
-        html: "html",
-        css: "css",
-        jsx: "jsx",
-        tsx: "tsx",
-        cpp: "cpp",
-        c: "c",
-        php: "php",
-        sql: "sql",
-        xml: "xml",
-        txt: "text",
-        scss: "scss",
-        md: "markdown",
-      };
+      // PDF FILES
+      if (pdfExtensions.includes(fileExtension)) {
+        const pdfUrl = `data:application/pdf;base64,${fileContent.content}`;
+        return (
+          <iframe
+            src={pdfUrl}
+            title={fileContent.name}
+            style={{ width: "100%", height: "100%", border: "none" }}
+          />
+        );
+      }
+
+      // DOC FILES
+      if (docExtensions.includes(fileExtension)) {
+        const docUrl = `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${fileContent.content}`;
+        return (
+          <iframe
+            src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(
+              window.location.origin + "/" + docUrl
+            )}`}
+            title={fileContent.name}
+            style={{ width: "100%", height: "100%", border: "none" }}
+          />
+        );
+      }
+
+      // FOR TEXT AND CODE FILES
       if (
         textExtensions.includes(fileExtension) ||
         codeExtensions.includes(fileExtension)
@@ -393,7 +421,7 @@ function RepoViewer() {
         );
       }
 
-      // For all other file types, show download option only
+      // FOR ALL OTHER FILE TYPES, SHOW DOWNLOAD PROMPT
       return (
         <Box
           sx={{
@@ -427,6 +455,7 @@ function RepoViewer() {
         </Box>
       );
     } catch (err) {
+      // CATCH ANY ERROR DURING FILE RENDERING
       return (
         <Box
           sx={{
@@ -439,7 +468,7 @@ function RepoViewer() {
           }}
         >
           <Alert severity="error" sx={{ m: 2 }}>
-            Failed to decode file content
+            Failed to load file content. You can download it instead.
           </Alert>
           <Button
             variant="contained"
@@ -559,7 +588,9 @@ function RepoViewer() {
                   underline="hover"
                   color="inherit"
                   onClick={() => {
-                    setCurrentPath(arr.slice(0, index + 1).join("/"));
+                    // setCurrentPath(arr.slice(0, index + 1).join("/"));
+                    const path = arr.slice(0, index + 1).join("/");
+                    navigate(`/share/${token}/${path}`);
                     setFileContent(null);
                   }}
                   sx={{
