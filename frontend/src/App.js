@@ -120,7 +120,7 @@ function App() {
             path="/manage"
             element={user ? <RepoManage /> : <Navigate to="/" />}
           />
-          <Route path="/share/:token" element={<RepoViewer />} />
+          <Route path="/share/:token/*" element={<RepoViewer />} />
         </Routes>
       </main>
 
